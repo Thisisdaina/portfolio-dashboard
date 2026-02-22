@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gordon's Portfolio Dashboard (Dynamic)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js & Annotation Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans p-4 md:p-8">
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-200 pb-4">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight text-slate-900">Portfolio Analytics</h1>
+                <p class="text-sm text-slate-500 mt-1">Gordon's Supercharged Dashboard - <span id="dataDateLabel" class="font-bold text-indigo-600">데이터를 입력하십시오</span></p>
+            </div>
+            <div class="mt-4 md:mt-0 flex gap-2">
+                <button id="resetBtn" class="hidden px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium transition-colors">
+                    데이터 다시 입력
+                </button>
+                <div class="px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-sm font-medium flex items-center gap-2">
+                    <i data-lucide="database" class="w-4 h-4"></i> Data Engine Active
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Input Section -->
+        <div id="inputSection" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <h2 class="text-lg font-bold mb-2 flex items-center gap-2"><i data-lucide="file-spreadsheet" class="w-5 h-5 text-emerald-600"></i> RAW DATA 입력 (CSV/엑셀 복사)</h2>
+            <p class="text-sm text-slate-500 mb-4">엑셀 파일(신세주.csv 등)의 내용을 헤더(DATE, Market, Ticker...)를 포함하여 그대로 복사한 뒤 아래에 붙여넣고 분석 버튼을 누르십시오.</p>
+            <textarea id="csvInput" class="w-full h-48 p-4 border border-slate-300 rounded-xl text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="DATE,Market,Ticker,Principal,Value,PnL,ROI_Raw,Realized P/L,Sector...&#10;2026-02-22,KR,현대차,4074800,4163018,88218,2.16%,,자동차..."></textarea>
+            <div class="mt-4 flex justify-end">
+                <button id="analyzeBtn" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center gap-2 transition-colors">
+                    <i data-lucide="bar-chart-2" class="w-4 h-4"></i> 데이터 분석 실행
+                </button>
+            </div>
+        </div>
+
+        <!-- Dashboard Content (Hidden by default) -->
+        <div id="dashboardContent" class="hidden space-y-6">
+            <!-- KPI Row -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4" id="kpiCards"></div>
+
+            <!-- Charts Row -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Scatter Plot -->
+                <div class="col-span-1 lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <h2 class="text-lg font-bold mb-4 flex items-center gap-2"><i data-lucide="layers" class="w-5 h-5"></i> 리스크 스캐터 플롯 (비중 vs 수익률)</h2>
+                    <p class="text-xs text-slate-500 mb-6">우측(고비중)에 위치할수록 계좌 영향력이 크며, 상하단 점선 이탈 시 대응이 필요합니다.</p>
+                    <div class="h-80 w-full relative">
+                        <canvas id="scatterChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Allocation Column -->
+                <div class="flex flex-col gap-6">
+                    <!-- Market Pie -->
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex-1">
+                        <h2 class="text-lg font-bold mb-4">시장 비중 (US vs KR)</h2>
+                        <div class="h-48 w-full relative">
+                            <canvas id="marketPieChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Sector Bar -->
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex-1">
+                        <h2 class="text-lg font-bold mb-2">섹터 편중도 (Top 5)</h2>
+                        <div class="h-48 w-full relative">
+                            <canvas id="sectorBarChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Monitoring Table -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+                    <h2 class="text-lg font-bold">전체 포지션 모니터링 (Action Radar)</h2>
+                    <span id="totalStocksLabel" class="text-sm font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">총 0 종목</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-600">
+                        <thead class="text-xs text-slate-500 uppercase bg-slate-50">
+                            <tr>
+                                <th class="px-6 py-4 font-medium">Ticker</th>
+                                <th class="px-6 py-4 font-medium">Market/Sector</th>
+                                <th class="px-6 py-4 font-medium text-right">Weight</th>
+                                <th class="px-6 py-4 font-medium text-right">Value (KRW)</th>
+                                <th class="px-6 py-4 font-medium text-right">PnL (KRW)</th>
+                                <th class="px-6 py-4 font-medium text-right">ROI (%)</th>
+                                <th class="px-6 py-4 font-medium text-center">Action Signal</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody" class="divide-y divide-slate-100">
+                            <!-- Table rows injected via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global Chart instances for destruction
+        let scatterChartInst = null;
+        let pieChartInst = null;
+        let barChartInst = null;
+
+        // Initialize Icons
+        lucide.createIcons();
+
+        // Utilities
+        const formatCurrency = (val) => new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(val);
+        const formatPct = (val) => val.toFixed(2) + '%';
+        
+        const getRiskStatus = (roi) => {
+            if (roi <= -15) return { label: '손절 (Stop-Loss)', color: 'text-rose-600', bg: 'bg-rose-100', icon: 'alert-octagon', chartColor: '#e11d48' };
+            if (roi < 0) return { label: '주의 (Warning)', color: 'text-amber-600', bg: 'bg-amber-100', icon: 'alert-triangle', chartColor: '#f59e0b' };
+            if (roi > 40) return { label: '과열 (Take-Profit)', color: 'text-purple-600', bg: 'bg-purple-100', icon: 'trending-up', chartColor: '#8b5cf6' };
+            return { label: '정상 (Hold)', color: 'text-emerald-600', bg: 'bg-emerald-100', icon: 'check-circle', chartColor: '#10b981' };
+        };
+
+        // CSV Parsing Logic
+        document.getElementById('analyzeBtn').addEventListener('click', () => {
+            const rawData = document.getElementById('csvInput').value;
+            if (!rawData.trim()) {
+                alert("데이터를 입력해주세요.");
+                return;
+            }
+            processData(rawData);
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            document.getElementById('dashboardContent').classList.add('hidden');
+            document.getElementById('inputSection').classList.remove('hidden');
+            document.getElementById('resetBtn').classList.add('hidden');
+            document.getElementById('dataDateLabel').textContent = "데이터를 입력하십시오";
+            document.getElementById('dataDateLabel').className = "font-bold text-indigo-600";
+        });
+
+        function processData(csvText) {
+            try {
+                // 눈에 보이지 않는 BOM(Byte Order Mark) 및 특수 문자 제거
+                const cleanText = csvText.replace(/^\uFEFF/, '').trim();
+                const lines = cleanText.split(/\r?\n/);
+                if (lines.length < 2) throw new Error("데이터 행이 부족합니다.");
+
+                // 엑셀에서 복사한 데이터(탭 구분)와 일반 CSV(쉼표 구분)를 자동 감지
+                const isTsv = lines[0].includes('\t');
+                const separatorRegex = isTsv ? /\t/ : /,(?=(?:(?:[^"]*"){2})*[^"]*$)/;
+
+                // Parse Headers (특수 문자 제거 후 대문자 변환)
+                const headers = lines[0].split(separatorRegex).map(h => {
+                    return h.replace(/^"|"$/g, '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim().toUpperCase();
+                });
+                
+                const dateIdx = headers.indexOf('DATE');
+                const tickerIdx = headers.indexOf('TICKER');
+                const marketIdx = headers.indexOf('MARKET');
+                const sectorIdx = headers.indexOf('SECTOR');
+                const principalIdx = headers.indexOf('PRINCIPAL');
+                const valueIdx = headers.indexOf('VALUE');
+                const roiIdx = headers.indexOf('ROI_RAW');
+
+                if ([dateIdx, tickerIdx, principalIdx, valueIdx, roiIdx].includes(-1)) {
+                    throw new Error(`필수 컬럼이 누락되었습니다. (인식된 헤더: ${headers.join(', ')})`);
+                }
+
+                let parsedRows = [];
+                for (let i = 1; i < lines.length; i++) {
+                    if (!lines[i].trim()) continue;
+                    // 자동 감지된 구분자로 행 분리
+                    const row = lines[i].split(separatorRegex).map(item => item ? item.replace(/^"|"$/g, '').trim() : '');
+                    
+                    const cleanNum = (str) => {
+                        if(!str) return 0;
+                        // 숫자 변환 방해 문자(기호, 공백, BOM 등) 전면 제거
+                        return parseFloat(str.replace(/[₩,%\"\s\u200B-\u200D\uFEFF]/g, ''));
+                    };
+
+                    let rawRoiStr = row[roiIdx] || "0";
+                    let roiVal = cleanNum(rawRoiStr);
+                    // If ROI is decimal (e.g. 0.0216), multiply by 100. If it already has %, cleanNum gives 2.16 directly.
+                    if (!rawRoiStr.includes('%') && Math.abs(roiVal) < 10) { 
+                        roiVal = roiVal * 100;
+                    }
+
+                    parsedRows.push({
+                        DATE: row[dateIdx],
+                        Ticker: row[tickerIdx],
+                        Market: row[marketIdx] || 'Unknown',
+                        Sector: row[sectorIdx] || 'Unknown',
+                        Principal: cleanNum(row[principalIdx]),
+                        Value: cleanNum(row[valueIdx]),
+                        ROI: roiVal
+                    });
+                }
+
+                // Filter by Latest Date
+                const dates = [...new Set(parsedRows.map(r => r.DATE))].sort().reverse();
+                const latestDate = dates[0];
+                const latestDataRaw = parsedRows.filter(r => r.DATE === latestDate);
+
+                if(latestDataRaw.length === 0) throw new Error("유효한 데이터를 찾을 수 없습니다.");
+
+                buildDashboard(latestDataRaw, latestDate);
+
+            } catch (err) {
+                alert("데이터 파싱 오류: " + err.message);
+            }
+        }
+
+        function buildDashboard(dataRows, dateStr) {
+            // Calculate Totals
+            let totalPrincipal = 0;
+            let totalValue = 0;
+            dataRows.forEach(d => {
+                totalPrincipal += d.Principal;
+                totalValue += d.Value;
+            });
+
+            // Calculate Weights and PnL
+            const finalData = dataRows.map(d => ({
+                ...d,
+                PnL: d.Value - d.Principal,
+                Weight: totalValue > 0 ? (d.Value / totalValue) * 100 : 0
+            })).sort((a, b) => b.Weight - a.Weight);
+
+            const totalPnL = totalValue - totalPrincipal;
+            const totalROI = totalPrincipal > 0 ? (totalPnL / totalPrincipal) * 100 : 0;
+
+            // Update UI State
+            document.getElementById('inputSection').classList.add('hidden');
+            document.getElementById('dashboardContent').classList.remove('hidden');
+            document.getElementById('resetBtn').classList.remove('hidden');
+            
+            document.getElementById('dataDateLabel').textContent = `기준일: ${dateStr}`;
+            document.getElementById('dataDateLabel').className = "font-bold text-emerald-600";
+            document.getElementById('totalStocksLabel').textContent = `총 ${finalData.length} 종목`;
+
+            // Render KPIs
+            let stopLossCount = finalData.filter(d => d.ROI <= -15).length;
+            document.getElementById('kpiCards').innerHTML = `
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
+                    <span class="text-slate-500 text-sm font-medium flex items-center gap-2"><i data-lucide="dollar-sign" class="w-4 h-4"></i> 총 평가액</span>
+                    <span class="text-2xl font-bold mt-2">${formatCurrency(totalValue)}</span>
+                </div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
+                    <span class="text-slate-500 text-sm font-medium flex items-center gap-2"><i data-lucide="trending-up" class="w-4 h-4"></i> 총 평가손익</span>
+                    <span class="text-2xl font-bold mt-2 ${totalPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${totalPnL > 0 ? '+' : ''}${formatCurrency(totalPnL)}</span>
+                </div>
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col">
+                    <span class="text-slate-500 text-sm font-medium flex items-center gap-2"><i data-lucide="activity" class="w-4 h-4"></i> 포트폴리오 수익률</span>
+                    <span class="text-2xl font-bold mt-2 ${totalROI >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${totalROI > 0 ? '+' : ''}${formatPct(totalROI)}</span>
+                </div>
+                <div class="bg-rose-50 p-5 rounded-2xl shadow-sm border border-rose-100 flex flex-col">
+                    <span class="text-rose-600 text-sm font-medium flex items-center gap-2"><i data-lucide="shield-alert" class="w-4 h-4"></i> 위험 경고 (손절 대상)</span>
+                    <span class="text-2xl font-bold text-rose-700 mt-2">${stopLossCount} 종목</span>
+                </div>
+            `;
+
+            // Render Table
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            finalData.forEach(row => {
+                const risk = getRiskStatus(row.ROI);
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition-colors';
+                tr.innerHTML = `
+                    <td class="px-6 py-4 font-bold text-slate-900">${row.Ticker}</td>
+                    <td class="px-6 py-4">
+                        <div class="flex flex-col">
+                            <span class="text-slate-800">${row.Sector}</span>
+                            <span class="text-xs text-slate-400">${row.Market}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-right font-medium text-slate-700">${row.Weight.toFixed(2)}%</td>
+                    <td class="px-6 py-4 text-right font-medium text-slate-700">${formatCurrency(row.Value)}</td>
+                    <td class="px-6 py-4 text-right font-semibold ${row.PnL >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${formatCurrency(row.PnL)}</td>
+                    <td class="px-6 py-4 text-right font-bold ${row.ROI >= 0 ? 'text-emerald-600' : 'text-rose-600'}">${row.ROI > 0 ? '+' : ''}${row.ROI.toFixed(2)}%</td>
+                    <td class="px-6 py-4">
+                        <div class="flex justify-center">
+                            <span class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold tracking-wide ${risk.bg} ${risk.color}">
+                                <i data-lucide="${risk.icon}" class="w-3.5 h-3.5"></i>
+                                ${risk.label}
+                            </span>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            lucide.createIcons();
+            renderCharts(finalData);
+        }
+
+        function renderCharts(data) {
+            Chart.register(window['chartjs-plugin-annotation']);
+
+            // Destroy existing charts to prevent overlap
+            if(scatterChartInst) scatterChartInst.destroy();
+            if(pieChartInst) pieChartInst.destroy();
+            if(barChartInst) barChartInst.destroy();
+
+            // 1. Scatter Chart
+            const ctxScatter = document.getElementById('scatterChart').getContext('2d');
+            scatterChartInst = new Chart(ctxScatter, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: '종목 데이터',
+                        data: data.map(d => ({ x: d.Weight, y: d.ROI, raw: d })),
+                        backgroundColor: data.map(d => getRiskStatus(d.ROI).chartColor),
+                        pointRadius: 6,
+                        pointHoverRadius: 8,
+                        borderWidth: 1,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(255,255,255,0.95)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#475569',
+                            borderColor: '#e2e8f0',
+                            borderWidth: 1,
+                            padding: 12,
+                            boxPadding: 6,
+                            callbacks: {
+                                label: (context) => {
+                                    const raw = context.raw.raw;
+                                    return [
+                                        `${raw.Ticker} (${raw.Sector})`,
+                                        `비중: ${raw.Weight.toFixed(2)}%`,
+                                        `수익률: ${raw.ROI.toFixed(2)}%`,
+                                        `평가액: ${formatCurrency(raw.Value)}`
+                                    ];
+                                }
+                            }
+                        },
+                        annotation: {
+                            annotations: {
+                                line1: { type: 'line', yMin: -15, yMax: -15, borderColor: '#e11d48', borderWidth: 2, borderDash: [5, 5], label: { content: '손절 라인 (-15%)', display: true, position: 'start', backgroundColor: '#e11d48', font: {size: 11} } },
+                                line2: { type: 'line', yMin: 0, yMax: 0, borderColor: '#94a3b8', borderWidth: 1 },
+                                line3: { type: 'line', yMin: 40, yMax: 40, borderColor: '#8b5cf6', borderWidth: 2, borderDash: [5, 5], label: { content: '과열/익절 라인 (+40%)', display: true, position: 'start', backgroundColor: '#8b5cf6', font: {size: 11} } }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: '포트폴리오 비중 (%)' }, grid: { display: false } },
+                        y: { title: { display: true, text: '수익률 (%)' } }
+                    }
+                }
+            });
+
+            // 2. Market Pie Chart
+            const marketData = {};
+            data.forEach(d => {
+                if(!marketData[d.Market]) marketData[d.Market] = 0;
+                marketData[d.Market] += d.Value;
+            });
+            const marketLabels = Object.keys(marketData);
+            const marketValues = Object.values(marketData);
+            
+            const ctxPie = document.getElementById('marketPieChart').getContext('2d');
+            pieChartInst = new Chart(ctxPie, {
+                type: 'doughnut',
+                data: {
+                    labels: marketLabels,
+                    datasets: [{
+                        data: marketValues,
+                        backgroundColor: ['#3b82f6', '#f43f5e', '#10b981', '#f59e0b'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } },
+                        tooltip: { callbacks: { label: (context) => ` ${formatCurrency(context.raw)}` } }
+                    }
+                }
+            });
+
+            // 3. Sector Bar Chart
+            const sectorDataRaw = {};
+            data.forEach(d => { sectorDataRaw[d.Sector] = (sectorDataRaw[d.Sector] || 0) + d.Value; });
+            const topSectors = Object.entries(sectorDataRaw).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+            const ctxBar = document.getElementById('sectorBarChart').getContext('2d');
+            barChartInst = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: topSectors.map(s => s[0]),
+                    datasets: [{
+                        data: topSectors.map(s => s[1]),
+                        backgroundColor: '#6366f1',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: (context) => ` ${formatCurrency(context.raw)}` } } },
+                    scales: {
+                        x: { display: false },
+                        y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
